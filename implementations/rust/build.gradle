@@ -6,6 +6,18 @@ if(project.hasProperty('mode')) {
   ext.mode = gradle.parent != null ? 'release' : 'debug'
 }
 
+if(project.hasProperty('partition')) {
+  ext.partition = partition
+} else {
+  ext.partition = "count:1/1"
+}
+
+if(project.hasProperty('archive-file')) {
+  ext.archivefile = partition
+} else {
+  ext.archivefile = "nextest-archive.tar.zst"
+}
+
 ext {
   // Are we running as part of Continuous Integration?
   ci = System.getenv('CI') == 'true'
@@ -142,7 +154,7 @@ task test {
       // Use 'cargo nextest' in CI
       exec {
         environment environmentVars()
-        commandLine cargo('--locked', 'nextest', 'run')
+        commandLine cargo('--locked', 'nextest', 'run','--archive-file',archivefile, '--partition', partition)
       }
       // Nextest does not currently support doctests,
       // so run doctests using cargo
@@ -156,7 +168,7 @@ task test {
       // Use 'cargo test' when not in CI
       exec {
         environment environmentVars()
-        commandLine cargo('--locked', 'test')
+        commandLine cargo('--locked', 'nextest', 'run', '--partition', partition)
       }
     }
   }
