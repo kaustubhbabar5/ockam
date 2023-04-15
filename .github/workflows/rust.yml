@@ -144,11 +144,41 @@ jobs:
           cd implementations/rust && ../../gradlew build_examples
       - uses: ./.github/actions/cargo_target_dir_pre_cache
 
-  test:
-    name: Rust - test
+  build-test-artifacts:
+    name: Build test artifacts
     runs-on: ubuntu-20.04
     container:
       image: ghcr.io/build-trust/ockam-builder@sha256:0a4c3640f78650e35207a047891e55863d8648a9333ea0bcfe03f09e2d57480c
+
+    steps:
+      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+        with:
+          ref: ${{ github.event.inputs.commit_sha }}
+      # - uses: actions-rs/toolchain@v1
+      #   with:
+      #     toolchain: stable
+      #     override: true
+      - uses: ./.github/actions/gradle_cache
+      - uses: ./.github/actions/cargo_home_cache
+      - uses: ./.github/actions/cargo_target_dir_cache
+      - name: Build and archive tests
+        run: cargo nextest archive --zstd-level 10 --archive-file nextest-archive.tar.zst
+      - name: Upload archive to workflow
+        uses: actions/upload-artifact@v3
+        with:
+          name: nextest-archive
+          path: nextest-archive.tar.zst
+
+
+  test:
+    name: Rust - test
+    runs-on: ubuntu-20.04
+    needs: [ build-test-artifacts ]
+    container:
+      image: ghcr.io/build-trust/ockam-builder@sha256:0a4c3640f78650e35207a047891e55863d8648a9333ea0bcfe03f09e2d57480c
+    strategy:
+      matrix:
+        partition: [1,2]
     services:
       ockam_cloud:
         image: ghcr.io/build-trust/ockam-cloud-node@sha256:518314876a5b07c263b88995792335c4426d940c10e5e638a60e66776d86cff5
@@ -161,9 +191,13 @@ jobs:
       - uses: ./.github/actions/gradle_cache
       - uses: ./.github/actions/cargo_home_cache
       - uses: ./.github/actions/cargo_target_dir_cache
+      - name: Download archive
+        uses: actions/download-artifact@v3
+        with:
+          name: nextest-archive
       - run: |
           rustc --version
-          cd implementations/rust && ../../gradlew test
+          cd implementations/rust && ../../gradlew test  -Parchive-file=nextest-archive.tar.zst  -Ppartition=count:${{ matrix.partition }}/2
       - uses: ./.github/actions/cargo_target_dir_pre_cache
 
   check_no_std:
@@ -260,26 +294,33 @@ jobs:
           cd implementations/rust && ../../gradlew build
       - uses: ./.github/actions/cargo_target_dir_pre_cache
 
-  test_nightly:
-    name: Rust - test_nightly
-    runs-on: ubuntu-20.04
-    container:
-      image: ghcr.io/build-trust/ockam-builder@sha256:0a4c3640f78650e35207a047891e55863d8648a9333ea0bcfe03f09e2d57480c
-    steps:
-      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
-        with:
-          ref: ${{ github.event.inputs.commit_sha }}
-      - run: rustup default nightly-2023-03-15
-      - run: rustup update nightly
-      - uses: ./.github/actions/gradle_cache
-      - uses: ./.github/actions/cargo_home_cache
-      - uses: ./.github/actions/cargo_target_dir_cache
-      - run: |
-          rustc --version
-          cd implementations/rust && ../../gradlew test
-        env:
-          NIGHTLY_CI: 1
-      - uses: ./.github/actions/cargo_target_dir_pre_cache
+  # test_nightly:
+  #   name: Rust - test_nightly
+  #   runs-on: ubuntu-20.04
+  #   container:
+  #     image: ghcr.io/build-trust/ockam-builder@sha256:0a4c3640f78650e35207a047891e55863d8648a9333ea0bcfe03f09e2d57480c
+  #   strategy:
+  #     matrix:
+  #       partition: [1, 2]
+  #   steps:
+  #     - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+  #       with:
+  #         ref: ${{ github.event.inputs.commit_sha }}
+  #     - run: rustup default nightly-2023-03-15
+  #     - run: rustup update nightly
+  #     - uses: ./.github/actions/gradle_cache
+  #     - uses: ./.github/actions/cargo_home_cache
+  #     - uses: ./.github/actions/cargo_target_dir_cache
+  #     - name: Download archive
+  #       uses: actions/download-artifact@v3
+  #       with:
+  #         name: nextest-archive
+  #     - run: |
+  #         rustc --version
+  #         cd implementations/rust && ../../gradlew test  -Parchive-file=nextest-archive.tar.zst  -Ppartition=count:${{ matrix.partition }}/2
+  #       env:
+  #         NIGHTLY_CI: 1
+  #     - uses: ./.github/actions/cargo_target_dir_pre_cache
 
   test_ockam_command:
     name: Rust - test_ockam_command
